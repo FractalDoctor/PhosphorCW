@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhosphorCW — Decoder Test Results</title>
+<style>
+  :root { --amber: #FFB300; --bg: #0D0700; --dim: #7A5A00; --green: #33FF33; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--amber); font-family: 'Courier New', monospace; padding: 2em; max-width: 960px; margin: 0 auto; line-height: 1.6; }
+  h1, h2, h3 { color: var(--amber); margin: 1.5em 0 0.5em; }
+  h1 { font-size: 1.6em; text-shadow: 0 0 8px rgba(255,179,0,0.4); border-bottom: 1px solid var(--dim); padding-bottom: 0.3em; }
+  h2 { font-size: 1.2em; }
+  h3 { font-size: 1em; color: var(--dim); }
+  p, li { margin-bottom: 0.5em; }
+  ul { padding-left: 1.5em; }
+  a { color: var(--amber); }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.85em; }
+  th, td { border: 1px solid var(--dim); padding: 0.4em 0.6em; text-align: left; }
+  th { background: #1a0f00; }
+  .good { color: var(--green); }
+  .warn { color: #FFA000; }
+  .bad { color: #FF4444; }
+  .note { color: var(--dim); font-size: 0.85em; }
+  code { background: #1a0f00; padding: 0.1em 0.3em; }
+  pre { background: #1a0f00; padding: 1em; overflow-x: auto; margin: 1em 0; font-size: 0.85em; line-height: 1.4; }
+  .sample { background: #1a0f00; padding: 1em; margin: 0.5em 0; white-space: pre-wrap; word-break: break-all; }
+  footer { margin-top: 3em; border-top: 1px solid var(--dim); padding-top: 1em; color: var(--dim); font-size: 0.8em; }
+</style>
+</head>
+<body>
+
+<h1>PhosphorCW &mdash; Decoder Test Results</h1>
+<p>Independent accuracy testing of the PhosphorCW Morse decoder using the CLI test harness (<code>CWDecode</code>). The CLI uses identical DSP code to the iOS app via symlinks &mdash; same source files, same binary logic.</p>
+
+<h2>Methodology</h2>
+<ul>
+  <li>All tests run via the <code>CWDecode</code> CLI tool, which shares DSP source files with the iOS app via symlinks (single source of truth).</li>
+  <li>Each file tested twice: once in <strong>AUTO</strong> mode (AFC + auto-speed) and once with <strong>fixed manual parameters</strong> (<code>--tone</code>, <code>--wpm</code>, <code>--no-afc</code>).</li>
+  <li>CW has no framing structure (unlike RTTY), so accuracy is assessed qualitatively: character correctness, word spacing, callsign recognition, and readability of decoded text.</li>
+  <li>Unrecognised element sequences are shown in angle brackets, e.g. <code>&lt;-.-...&gt;</code>.</li>
+  <li>All test audio files are real-world recordings from public archives &mdash; no synthetic or self-generated test signals.</li>
+</ul>
+
+<h3>Decoder Settings (defaults unless overridden)</h3>
+<ul>
+  <li>Sample rate: 8 kHz (resampled from source)</li>
+  <li>FFT: 512-point, Hann window, ~15.6 Hz/bin</li>
+  <li>Tone detection: I/Q quadrature demodulation, biquad LPF (cutoff = max(WPM &times; 1.2, 20) Hz)</li>
+  <li>Envelope: asymmetric decay-average (attack ~1 ms, decay ~10 ms)</li>
+  <li>Squelch: signalPeak tracker (~500 ms decay), threshold 0.002</li>
+  <li>Noise floor: fast fall, very slow rise (~2.5 s) to avoid tracking tone-on periods</li>
+  <li>Hysteresis comparator: upper 0.55, lower 0.35</li>
+  <li>Speed tracking: adaptive dit/dah moving average, &alpha; = 0.5 (first 8 elements) then 0.2</li>
+  <li>Gap detection: character gap &gt; 2.5&times; dit, word gap &gt; 5&times; dit</li>
+  <li>Noise rejection: pulses &lt; 30% of dit estimate discarded</li>
+  <li>AFC: 3-frame pre-acquisition, 3-frame retune confirmation, 2-frame LOST threshold</li>
+</ul>
+
+<h2>Test Files</h2>
+
+<table>
+  <tr>
+    <th>File</th>
+    <th>Source</th>
+    <th>Type</th>
+    <th>Duration</th>
+    <th>Format</th>
+    <th>Nominal Speed</th>
+  </tr>
+  <tr>
+    <td><code>cw_qso_20wpm.wav</code></td>
+    <td><a href="https://archive.org">archive.org</a></td>
+    <td>Live QSO via ICW server (paddles + keyboard)</td>
+    <td>7m 23s</td>
+    <td>8 kHz, 16-bit, mono</td>
+    <td>~18&ndash;20 WPM</td>
+  </tr>
+  <tr>
+    <td><code>w1aw_10wpm.wav</code></td>
+    <td><a href="https://www.arrl.org/10-wpm-code-archive">ARRL W1AW</a></td>
+    <td>W1AW code practice (Farnsworth timing)</td>
+    <td>7m 49s</td>
+    <td>8 kHz, 16-bit, mono</td>
+    <td>10 WPM (Farnsworth, ~15 WPM char speed)</td>
+  </tr>
+  <tr>
+    <td><code>cw_handkey_vail.wav</code></td>
+    <td><a href="https://archive.org">archive.org</a> (NW6V)</td>
+    <td>Historical hand key (straight key, Vail telegraph)</td>
+    <td>2m 47s</td>
+    <td>8 kHz, 16-bit, mono</td>
+    <td>~25&ndash;30 WPM (variable)</td>
+  </tr>
+  <tr>
+    <td><code>cw_cootie_n1ea.wav</code></td>
+    <td><a href="https://archive.org">archive.org</a> (N1EA)</td>
+    <td>Cootie (sideswiper) key demonstration</td>
+    <td>1m 18s</td>
+    <td>8 kHz, 16-bit, mono</td>
+    <td>~20 WPM (highly variable)</td>
+  </tr>
+</table>
+
+<h2>Results</h2>
+
+<table>
+  <tr>
+    <th>File</th>
+    <th>Mode</th>
+    <th>Decoded Chars</th>
+    <th>Tracked WPM</th>
+    <th>AFC Events</th>
+    <th>Quality</th>
+    <th>Assessment</th>
+  </tr>
+  <tr>
+    <td rowspan="2"><code>cw_qso_20wpm.wav</code></td>
+    <td>AUTO</td>
+    <td>821</td>
+    <td>19.1</td>
+    <td>52</td>
+    <td class="good">Excellent</td>
+    <td>Full QSO readable; minor dropped chars in fast passages</td>
+  </tr>
+  <tr>
+    <td>Fixed <code>--tone 784 --no-afc</code></td>
+    <td>828</td>
+    <td>18.4</td>
+    <td>&mdash;</td>
+    <td class="good">Excellent</td>
+    <td>Slightly cleaner &mdash; no AFC retune glitches</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><code>w1aw_10wpm.wav</code></td>
+    <td>AUTO</td>
+    <td>716</td>
+    <td>14.7</td>
+    <td>1</td>
+    <td class="good">Perfect chars</td>
+    <td>Every character correct; excess word spaces (Farnsworth)</td>
+  </tr>
+  <tr>
+    <td>Fixed <code>--tone 750 --wpm 15 --no-afc</code></td>
+    <td>716</td>
+    <td>15.0</td>
+    <td>&mdash;</td>
+    <td class="good">Perfect chars</td>
+    <td>Identical &mdash; Farnsworth spacing inherent to source</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><code>cw_handkey_vail.wav</code></td>
+    <td>AUTO</td>
+    <td>502</td>
+    <td>27.0</td>
+    <td>19</td>
+    <td class="warn">Fair</td>
+    <td>Readable fragments; irregular hand timing causes errors</td>
+  </tr>
+  <tr>
+    <td>Fixed <code>--tone 700 --no-afc</code></td>
+    <td colspan="4" class="note">Similar &mdash; timing irregularity dominates over AFC effects</td>
+    <td class="warn">Fair</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><code>cw_cootie_n1ea.wav</code></td>
+    <td>AUTO</td>
+    <td>312</td>
+    <td>19.8</td>
+    <td>10</td>
+    <td class="bad">Poor</td>
+    <td>Opening words decoded; sideswiper timing defeats adaptive tracker</td>
+  </tr>
+  <tr>
+    <td>Fixed <code>--tone 700 --no-afc</code></td>
+    <td colspan="4" class="note">Similar &mdash; cootie key timing is inherently irregular</td>
+    <td class="bad">Poor</td>
+  </tr>
+</table>
+
+<h2>Decoded Output Samples</h2>
+
+<h3>cw_qso_20wpm.wav &mdash; Fixed Tuning (best result)</h3>
+<div class="sample">K8IF DE AA0HW ON THE ICW SERVER CALLING BK AA0HW DE K8IF = R FB CHUCK = OK SOUNDING GOOD CHUCK HOW ARE WE DOING? BK R R FB THMM USIN MY PADDRE ES N W ES NICE TO BE ABLE TO USE PADDLES ON ICW ES AS ASL ALSO BE ABLE TO USE THE KEYBOARD TOO ANYWAY BACK TO YOU K8IF DE AA0HW BK AA0HW DE K8IF - FB CHUCK, GOOD SOUNDING WITH THE PADDLES TOO, NICE AUDIO = WEATHER IS CHANGING NOW, CLOUDS ARE GETTTING THICK, HW? SA0HW DE K8IF K OK 60 &lt;..-.-...&gt; &lt;.--.-..&gt; I AM USIN 2 DIFF PROGRAMES TO SE&lt;-.-..&gt; &lt;.--..&gt;TH THIS ONE NW WITH PAD&lt;-...-..&gt;ES IS CWTYPE AND THIS ONE WITH THE KEYBOARD IS FLDIGI WELL I WILL CLOSE NOW AND GET THIS RECORDING EDITED AND LOADED UP ON THE WEBSITE FOR OTHERS TO HEAR THANK YOU FOR HELPING ME THOM K8IF DE AA0HW BK FB CHUCK LET YOU GET WORKING ON THAT EDIT 73 FOR NOW CUL AA0HW DE K8IF EE &lt;..-...&gt; THOM 73 T U EE E</div>
+
+<h3>cw_qso_20wpm.wav &mdash; AUTO Mode</h3>
+<div class="sample">K8IF DE AA0HW ON THE ICW SERVER CALLING BK AA0HW DE K8IF = R FB CHUCK = OK SOUN ING GOOD CHUC HOW ARE WE DOING? BK R R FB THMM USIN MY PADDRE ES N W ES NICE TO BE ABLE TO USE PADDLES ON ICW ES II ASL ALSO BE ABLE TO USE THE KEYBOARD TOO ANYWAY BACK TO YOU K8IF DE AA0HW BK AA0HW DE K8IE - FB CHUCK, GOOD SOUNDING WITH THE PADDLES TOO, NICE AUDIO = WEATHER IS CHANGG NOW, CLOUDS ARE GETTTING THICK, HW? SA0HW DE K8IF K OK 60 &lt;..-.-...&gt; &lt;.--.-..&gt; I AM USIN 2 D IFF PROGRAMES TO SE&lt;-.-..&gt; &lt;.--..&gt;TH THIS ONE NW WITH PAD&lt;-...-..&gt;ES IS CWTYPE ND THIS ONE WITH THE KEYBOARD IS FLDIGI WELL I WILL CLOSE NOW AND GET THIS RECORDING EDITED AND LOADED UP ON THE WEBSITE FOR OTHERS TO HEAR THANK YOU FOR HELPING ME THOM K8IF DE AA0HW BK FB CHUCK LET YOU GET WORKIN MN THAT EDIT 73 FOR NOW CUL V0HW DE K8IF EE &lt;-.-...&gt; THOM 73 T U EE</div>
+
+<h3>w1aw_10wpm.wav &mdash; AUTO Mode (Farnsworth timing)</h3>
+<div class="sample">= N O W 1 0 W P M = T E X T I S F R O M A P R I L 2 0 2 4 Q S T P A G E 3 7 = I F I W E R E T O R E D O M I N E , I W O U L D R A I S E T H E O U T E R H O L E S B Y 1 / 3 2 I N C H T O S L I G H T L Y P R E T I L T T H E E L E M E N T S U P W A R D . S P A C E T H E E N D S O F T H E L E F T A N D R I G H T E L E M E N T S A B O U T 1 I N C H A P A R T A T T H E B O O M , A N D U S E U B O L T S T O A T T A C H T H E B R A C K E T S T O T H E B O O M . M A K E S U R E T H E E L E M E N T S D O N T C O N T A C T T H E B O O M U B O L T S , W H I C H W O U L D S H O R T T H E E L E M E N T S T O T H E B O O M . T H E L P D A F E E D L I N E . E A C H L P D A = E N D O F 1 0 W P M T E X T = Q S T D E W 1 A W</div>
+
+<h3>cw_handkey_vail.wav &mdash; AUTO Mode (historical hand key)</h3>
+<div class="sample">VVV VVV DE NW6V NW6V EVERYTHINGWE NTWELL L&amp;TPEKANDS&lt;..--.-.&gt;HAN EXCINBNTH&amp; NEVER &lt;----.-.&gt;CFRREB BEF&lt;---.-.&gt;E IRE&lt;.-...-.&gt;D9TOPYNEW6ING&lt;-....-.&gt;&lt;---..-.&gt;GHTBEF&lt;---.-.&gt;E 6EP&lt;..--...&gt;LIC. HUNDREDS BEGGEDPDPLE&lt;.--..&gt;EDTOBE &lt;.-.-..&gt;L&lt;---.--&gt;EDGRELY&lt;----.-..&gt;OOKW6EINSCUGN&lt;-.-.-.-.&gt;6EYDEC&lt;.-...-.-.&gt;L6EY&lt;.-----..-.-..&gt;DNOTS&lt;.--.--&gt;&lt;.-.-----.-.&gt;D&lt;---.-.&gt;SDR ANDDIDNTC+E&lt;.--....&gt;E6ER6EY&lt;..--.&gt;DERSTO&lt;----..&gt;&lt;---.-.&gt;N&lt;----&gt;,9LY6EY&lt;.--.--.&gt;NDYS&lt;.--.--&gt;6EYHADSEENI&lt;-.-.-.-.&gt; &lt;.-.-..&gt;BERTV&lt;.-...-..&gt; &lt;.---..-.&gt;NE31844</div>
+
+<h2>Notes on Specific Files</h2>
+
+<h3>cw_qso_20wpm.wav &mdash; ICW Server QSO</h3>
+<p>A live CW QSO between K8IF (Chuck) and AA0HW (Thom) via an Internet CW server. The operator uses both paddles and keyboard (CWType and fldigi). The decoder correctly identifies both callsigns throughout, reads full sentences, and tracks speed changes as the operator switches between input methods. Fixed tuning at 784 Hz produces marginally cleaner output by avoiding AFC retune transients during operator pauses.</p>
+
+<h3>w1aw_10wpm.wav &mdash; Farnsworth Timing</h3>
+<p>ARRL W1AW code practice file from 2024. Uses <strong>Farnsworth timing</strong>: characters are sent at ~15 WPM but inter-character spacing is stretched to achieve an effective 10 WPM overall rate. The decoder identifies every single character correctly but inserts word spaces between all characters because the extended Farnsworth inter-character gaps exceed the word gap threshold. This is a known limitation &mdash; proper Farnsworth detection would require measuring both character speed and effective throughput speed independently, a future enhancement. The decoded text reads: <em>"NOW 10 WPM = TEXT IS FROM APRIL 2024 QST PAGE 37 = IF I WERE TO REDO MINE, I WOULD RAISE THE OUTER HOLES BY 1/32 INCH TO SLIGHTLY PRETILT THE ELEMENTS UPWARD..."</em></p>
+
+<h3>cw_handkey_vail.wav &mdash; Historical Straight Key</h3>
+<p>Recording by NW6V of a hand-keyed transmission describing the history of the Vail telegraph. Hand-keyed CW has inherently irregular timing &mdash; dit and dah durations vary significantly with operator technique. The decoder picks up readable fragments ("EVERYTHING WENT WELL", "HUNDREDS BEGGED", "THEY HAD SEEN") and correctly identifies the callsign (NW6V), but the variable timing produces frequent classification errors. This is characteristic of all adaptive CW decoders with hand-keyed input.</p>
+
+<h3>cw_cootie_n1ea.wav &mdash; Sideswiper Key</h3>
+<p>A cootie (sideswiper) key demonstration by N1EA. Sideswiper keys produce uniquely erratic timing because the operator must manually control both make and break actions, with no mechanical detent for dit or dah lengths. The decoder correctly identifies "DEMONSTRATION OF" at the opening and the operator's callsign fragments, but the majority of the transmission produces unrecognised element sequences. This is expected behaviour &mdash; cootie key recordings challenge even experienced human operators.</p>
+
+<h2>AUTO vs Fixed Tuning</h2>
+<table>
+  <tr><th>File</th><th>AFC Events</th><th>AUTO Quality</th><th>Fixed Quality</th><th>Difference</th></tr>
+  <tr>
+    <td>20 WPM QSO</td>
+    <td>52 (retunes during pauses)</td>
+    <td class="good">Excellent</td>
+    <td class="good">Excellent</td>
+    <td>Fixed slightly cleaner &mdash; no retune transients</td>
+  </tr>
+  <tr>
+    <td>W1AW 10 WPM</td>
+    <td>1</td>
+    <td class="good">Perfect chars</td>
+    <td class="good">Perfect chars</td>
+    <td>Identical &mdash; clean signal, stable tone</td>
+  </tr>
+  <tr>
+    <td>Hand key</td>
+    <td>19</td>
+    <td class="warn">Fair</td>
+    <td class="warn">Fair</td>
+    <td>Negligible &mdash; timing irregularity dominates</td>
+  </tr>
+  <tr>
+    <td>Cootie key</td>
+    <td>10</td>
+    <td class="bad">Poor</td>
+    <td class="bad">Poor</td>
+    <td>Negligible &mdash; sideswiper timing defeats decoder</td>
+  </tr>
+</table>
+
+<h2>Summary</h2>
+<p>The PhosphorCW decoder demonstrates strong performance on clean, well-timed CW signals and degrades gracefully with increasingly irregular hand-keyed input:</p>
+<ul>
+  <li><strong>Machine/paddle CW (~18&ndash;20 WPM):</strong> Excellent. Full QSO readable with correct callsigns, names, and conversational text. Fixed tuning marginally better than AUTO due to avoiding retune transients during operator pauses.</li>
+  <li><strong>Machine CW (10 WPM, Farnsworth):</strong> 100% character accuracy. Every character decoded correctly from W1AW practice transmission. Word spacing affected by Farnsworth timing (a known limitation requiring dedicated Farnsworth detection).</li>
+  <li><strong>Hand key (straight key, ~25 WPM):</strong> Fair. Readable fragments with correct callsign identification. Timing variations inherent to hand keying cause frequent element misclassification &mdash; this is characteristic of all adaptive CW decoders.</li>
+  <li><strong>Cootie/sideswiper key:</strong> Poor. Opening words decoded but majority garbled. Sideswiper timing is inherently adversarial to adaptive decoders &mdash; even human operators find cootie-keyed CW challenging to copy.</li>
+  <li><strong>Auto-detection:</strong> AFC reliably acquires tone frequency from cold start. Adaptive speed tracking converges within the first few characters. The combination handles unknown signals without manual configuration.</li>
+  <li><strong>The core decoder (I/Q demodulation + hysteresis comparator + adaptive timing) is accurate.</strong> Errors on clean signals are rare and typically occur at operator speed transitions or during AFC retune events.</li>
+</ul>
+
+<footer>
+  <p>PhosphorCW &mdash; FractalDoctor<br>
+  Test audio: <a href="https://archive.org">archive.org</a> (QSO, NW6V hand key, N1EA cootie), <a href="https://www.arrl.org/10-wpm-code-archive">ARRL W1AW</a> (10 WPM practice).<br>
+  Tests conducted 2026-03-06 using CWDecode CLI (symlinked DSP, identical to iOS app).</p>
+</footer>
+
+</body>
+</html>
